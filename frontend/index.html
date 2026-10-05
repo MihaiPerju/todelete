@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spaces DB Probe</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 24px 80px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    header h1 { font-size: 1.6rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.4px; }
+    header p  { margin-top: 6px; font-size: 0.875rem; color: #64748b; }
+
+    .stack {
+      width: 100%;
+      max-width: 660px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card {
+      background: #1a1f2e;
+      border: 1px solid #252d40;
+      border-radius: 14px;
+      padding: 20px 22px;
+    }
+
+    .card-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #475569;
+      margin-bottom: 12px;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    input[type="text"], input[type="url"] {
+      flex: 1;
+      background: #0f1117;
+      border: 1px solid #252d40;
+      border-radius: 8px;
+      padding: 10px 13px;
+      font-size: 0.875rem;
+      color: #e2e8f0;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus { border-color: #6366f1; }
+    input::placeholder { color: #334155; }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 8px;
+    }
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #334155;
+      flex-shrink: 0;
+    }
+    .dot.ok  { background: #22c55e; box-shadow: 0 0 5px #22c55e88; }
+    .dot.err { background: #ef4444; box-shadow: 0 0 5px #ef444488; }
+
+    button {
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    button:hover   { background: #4f46e5; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    button.ghost {
+      background: transparent;
+      border: 1px solid #252d40;
+      color: #94a3b8;
+    }
+    button.ghost:hover { background: #1e2435; }
+
+    .divider {
+      height: 1px;
+      background: #252d40;
+      margin: 14px 0;
+    }
+
+    /* Stats */
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .stat {
+      flex: 1;
+      background: #0f1117;
+      border: 1px solid #252d40;
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+    .stat .val  { font-size: 1.75rem; font-weight: 700; color: #818cf8; line-height: 1; }
+    .stat .lbl  { font-size: 0.7rem; color: #475569; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    th {
+      text-align: left; padding: 7px 10px;
+      font-size: 0.7rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      color: #334155; border-bottom: 1px solid #252d40;
+    }
+    td { padding: 9px 10px; border-bottom: 1px solid #1a1f2e; color: #94a3b8; }
+    td.id-cell { color: #6366f1; font-weight: 700; width: 56px; }
+    td.msg-cell { color: #cbd5e1; }
+    td.time-cell { font-variant-numeric: tabular-nums; font-size: 0.8rem; white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+
+    tr.fresh td { animation: flash 0.8s ease-out; }
+    @keyframes flash {
+      0%   { background: #2e2a5e; }
+      100% { background: transparent; }
+    }
+
+    .empty { text-align: center; padding: 28px; color: #334155; font-size: 0.85rem; }
+
+    .error-msg {
+      font-size: 0.8rem;
+      color: #f87171;
+      margin-top: 8px;
+      display: none;
+    }
+    .error-msg.on { display: block; }
+
+    .spinner {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle; margin-right: 5px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Spaces DB Probe</h1>
+  <p>Test your backend + database end-to-end</p>
+</header>
+
+<div class="stack">
+
+  <!-- 1. Backend config -->
+  <div class="card">
+    <div class="card-label">① Backend URL</div>
+    <div class="row">
+      <input id="urlInput" type="url"
+        placeholder="https://your-space.mistral.space" />
+      <button id="pingBtn" onclick="ping()">Ping</button>
+    </div>
+    <div class="status-pill">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Not connected</span>
+    </div>
+    <div class="error-msg" id="pingErr"></div>
+  </div>
+
+  <!-- 2. Create record -->
+  <div class="card">
+    <div class="card-label">② Create record</div>
+    <div class="row">
+      <input id="msgInput" type="text" placeholder="Optional message…" />
+      <button id="insertBtn" onclick="insertRecord()" disabled>Insert row</button>
+    </div>
+    <div class="error-msg" id="insertErr"></div>
+  </div>
+
+  <!-- 3. Records -->
+  <div class="card" id="recordsCard">
+    <div class="card-label" style="margin-bottom:0; display:flex; justify-content:space-between; align-items:center;">
+      <span>③ Records</span>
+      <button class="ghost" style="padding:5px 11px; font-size:0.78rem;" id="fetchBtn" onclick="fetchRecords()" disabled>↺ Refresh</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="stats-row" id="statsRow" style="display:none">
+      <div class="stat"><div class="val" id="totalVal">—</div><div class="lbl">Total hits</div></div>
+      <div class="stat"><div class="val" id="lastIdVal">—</div><div class="lbl">Last ID</div></div>
+    </div>
+
+    <div id="tableWrap"><div class="empty">Connect to a backend to see records.</div></div>
+    <div class="error-msg" id="fetchErr"></div>
+  </div>
+
+</div>
+
+<script>
+  const $  = id => document.getElementById(id);
+  let connected = false;
+  let prevIds = new Set();
+
+  function getUrl() { return $('urlInput').value.trim().replace(/\/$/, ''); }
+
+  function setStatus(ok, text) {
+    $('statusDot').className = 'dot ' + (ok ? 'ok' : 'err');
+    $('statusText').textContent = text;
+    connected = ok;
+    $('insertBtn').disabled = !ok;
+    $('fetchBtn').disabled  = !ok;
+  }
+
+  function showErr(id, msg) { $(id).textContent = msg; $(id).classList.add('on'); }
+  function clearErr(id)     { $(id).classList.remove('on'); }
+
+  function renderRecords(data) {
+    const rows = data.rows ?? [];
+    $('statsRow').style.display = 'flex';
+    $('totalVal').textContent = data.total_hits ?? '—';
+    $('lastIdVal').textContent = rows.length ? rows[0].id : '—';
+
+    if (!rows.length) {
+      $('tableWrap').innerHTML = '<div class="empty">No rows yet — insert one above.</div>';
+      return;
+    }
+    const newIds = new Set(rows.map(r => r.id));
+    const body = rows.map(r => `
+      <tr class="${!prevIds.has(r.id) ? 'fresh' : ''}">
+        <td class="id-cell">#${r.id}</td>
+        <td class="msg-cell">${escHtml(r.message ?? '')}</td>
+        <td class="time-cell">${fmtDate(r.hit_at)}</td>
+      </tr>`).join('');
+    prevIds = newIds;
+    $('tableWrap').innerHTML = `
+      <table>
+        <thead><tr><th>ID</th><th>Message</th><th>Inserted at</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>`;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function fmtDate(iso) {
+    try { return new Date(iso).toLocaleString(); } catch { return iso; }
+  }
+
+  async function ping() {
+    const url = getUrl();
+    if (!url) { setStatus(false, 'Enter a URL first'); return; }
+    clearErr('pingErr');
+    $('pingBtn').innerHTML = '<span class="spinner"></span>Pinging…';
+    $('pingBtn').disabled = true;
+    try {
+      const r = await fetch(url + '/healthz');
+      if (r.ok) {
+        setStatus(true, `Connected — ${url}`);
+        await fetchRecords();
+      } else {
+        setStatus(false, `Unhealthy (HTTP ${r.status})`);
+      }
+    } catch(e) {
+      setStatus(false, 'Unreachable');
+      showErr('pingErr', e.message);
+    } finally {
+      $('pingBtn').innerHTML = 'Ping';
+      $('pingBtn').disabled = false;
+    }
+  }
+
+  async function insertRecord() {
+    if (!connected) return;
+    clearErr('insertErr');
+    const msg = $('msgInput').value.trim();
+    $('insertBtn').innerHTML = '<span class="spinner"></span>Inserting…';
+    $('insertBtn').disabled = true;
+    try {
+      const r = await fetch(getUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? `HTTP ${r.status}`);
+      $('msgInput').value = '';
+      renderRecords(data);
+      clearErr('fetchErr');
+    } catch(e) {
+      showErr('insertErr', e.message);
+    } finally {
+      $('insertBtn').innerHTML = 'Insert row';
+      $('insertBtn').disabled = false;
+    }
+  }
+
+  async function fetchRecords() {
+    if (!connected && !getUrl()) return;
+    clearErr('fetchErr');
+    $('fetchBtn').innerHTML = '<span class="spinner"></span>';
+    $('fetchBtn').disabled = true;
+    try {
+      const r = await fetch(getUrl());
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? `HTTP ${r.status}`);
+      renderRecords(data);
+    } catch(e) {
+      showErr('fetchErr', e.message);
+    } finally {
+      $('fetchBtn').innerHTML = '↺ Refresh';
+      $('fetchBtn').disabled = !connected;
+    }
+  }
+
+  // Pre-fill from ?backend=
+  const p = new URLSearchParams(location.search);
+  if (p.get('backend')) {
+    $('urlInput').value = p.get('backend');
+    ping();
+  }
+
+  $('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') ping(); });
+  $('msgInput').addEventListener('keydown', e => { if (e.key === 'Enter') insertRecord(); });
+</script>
+</body>
+</html>
